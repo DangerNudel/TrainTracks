@@ -5,14 +5,15 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](#license)
 [![Platform: Debian 12](https://img.shields.io/badge/Platform-Debian%2012-blue.svg)](#requirements)
 [![Python: 3.11+](https://img.shields.io/badge/Python-3.11+-green.svg)](#requirements)
-[![Offline: Yes](https://img.shields.io/badge/Offline-Capable-orange.svg)](#offline-capability)
+[![Dependencies: Zero](https://img.shields.io/badge/Dependencies-Zero-brightgreen.svg)](#zero-dependency-architecture)
+[![Offline: 100%](https://img.shields.io/badge/Offline-100%25-orange.svg)](#offline-capability)
 [![MITRE ATT&CK: Mapped](https://img.shields.io/badge/MITRE%20ATT%26CK-Mapped-red.svg)](#mitre-attck-mapping)
 
 ---
 
 ## Overview
 
-A complete ICS/SCADA training lab environment built around a realistic **South Carolina Rail Network Control System** and a **Hoover Dam 3D Structural Schematic**. Both applications are served through a Flask web server with an intentionally vulnerable authentication layer, designed as exploitation targets for classroom-based penetration testing exercises using tools like Metasploit Framework (`msfconsole`).
+A complete ICS/SCADA training lab environment built around a realistic **South Carolina Rail Network Control System** and a **Hoover Dam 3D Structural Schematic**. Both applications are served through a Python web server with an intentionally vulnerable authentication layer, designed as exploitation targets for classroom-based penetration testing exercises using tools like Metasploit Framework (`msfconsole`).
 
 This project provides students with a visually compelling, functionally realistic industrial control system to practice against — rather than a sterile form with a text field. The goal is to make training scenarios feel grounded in operational technology (OT) environments that mirror real-world infrastructure.
 
@@ -22,9 +23,19 @@ This project provides students with a visually compelling, functionally realisti
 |---|---|
 | **SC Rail Network Control System** | Full interactive SCADA-style GUI with live train tracking, switch/bridge/signal control, and realistic physics simulation |
 | **Hoover Dam 3D Wireframe** | Three.js-based rotating wireframe schematic with labeled engineering schematics — James Bond Q-branch briefing aesthetic |
-| **Vulnerable Web Server** | Flask application with intentional SQL injection, command injection, directory traversal, and credential weaknesses |
-| **Automated Installer** | One-command Debian 12 setup with systemd service, venv, and database initialization |
+| **Vulnerable Web Server** | Python stdlib server with intentional SQL injection, command injection, directory traversal, and credential weaknesses |
+| **Automated Installer** | One-command Debian 12 setup with systemd service and database initialization |
 | **Instructor Guide** | Full exploitation walkthrough with msfconsole commands, MITRE ATT&CK mappings, and tiered exercise paths |
+
+### Zero-Dependency Architecture
+
+The entire server runs on **Python 3 standard library only** — specifically `wsgiref.simple_server` (Python's built-in WSGI reference implementation). There is no Flask, no pip, no venv, no virtualenv, no package manager interaction of any kind. If Python 3 is installed, the server runs. This was a deliberate design choice for air-gapped lab networks where package repositories and internet access are unavailable.
+
+```
+External dependencies required: 0
+Python packages to install:     0
+Internet access needed:         No
+```
 
 ---
 
@@ -42,6 +53,7 @@ The centerpiece of the lab — a single-file, zero-dependency HTML application (
 - Pan (click-drag), zoom (scroll wheel), and animated zoom-to-target when selecting any infrastructure element
 - Mileage labels displayed on each track segment
 - Latitude/longitude coordinate readout tracking mouse position across the map
+- Decorative river lines at bridge crossings
 
 #### Realistic Train Simulation
 
@@ -49,6 +61,7 @@ The centerpiece of the lab — a single-file, zero-dependency HTML application (
 - **Physics-based movement** — each train's speed (25–60 mph) is calculated against real segment mileage
   - A 35 mph freight train on the 40-mile Columbia → Newberry segment takes ~69 minutes of sim-time
   - An Amtrak service at 60 mph covers the same 40-mile segment in ~40 minutes
+  - Speed formula: `progress_per_sim_second = speed_mph / (segment_miles × 3600)`
 - **Realistic operational behaviors**
   - Station stops at junctions (2–8 min dwell time)
   - End-of-route turnaround delays (15–45 min)
@@ -250,13 +263,13 @@ Bridges automatically set nearby signals to **RED** when opening and restore the
 
 ## Hoover Dam 3D Wireframe Schematic
 
-A Three.js-based interactive 3D wireframe model of Hoover Dam with a cinematic intelligence-briefing aesthetic. Single-file HTML, loads Three.js r128 from CDN.
+A Three.js-based interactive 3D wireframe model of Hoover Dam with a cinematic intelligence-briefing aesthetic. Single-file HTML (~1,170 lines). Requires Three.js r128 — bundled via CDN reference or serve locally for air-gapped use (see [Offline Capability](#offline-capability)).
 
 ### Features
 
 - **Procedurally generated geometry** — arch-gravity dam body built from 32 curved segments with accurate taper (660 ft base → 45 ft crest)
 - **10 major structural components modeled:**
-  - Dam body (curved arch-gravity wall)
+  - Dam body (curved arch-gravity wall with ghost-fill transparency)
   - 4 intake towers (cylindrical, upstream face)
   - 2 powerhouse wings (downstream base, curved alignment)
   - 4 penstocks (curved tube geometry, 30 ft diameter)
@@ -287,29 +300,34 @@ A Three.js-based interactive 3D wireframe model of Hoover Dam with a cinematic i
 
 ## Vulnerable Lab Server
 
-The Flask web server hosting both applications behind an intentionally vulnerable authentication layer. Designed for exploitation exercises with Metasploit Framework and manual techniques.
+A Python web server hosting both applications behind an intentionally vulnerable authentication layer. Built on `wsgiref.simple_server` (Python standard library WSGI implementation) with zero external dependencies. Designed for exploitation exercises with Metasploit Framework and manual techniques.
 
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Debian 12 Host (Target)        Port 8080       │
-│                                                 │
-│  /opt/scrn-lab/                                 │
-│  ├── app.py              Flask application      │
-│  ├── users.db            SQLite database        │
-│  ├── venv/               Python virtual env     │
-│  ├── templates/                                 │
-│  │   ├── login.html      ← SQLi attack surface  │
-│  │   ├── dashboard.html  Post-auth hub          │
-│  │   ├── diagnostics.html← RCE attack surface   │
-│  │   └── files.html      ← LFI attack surface   │
-│  └── static/                                    │
-│      ├── sc_rail_control.html                   │
-│      └── hoover_dam_wireframe.html              │
-│                                                 │
-│  Service: scrn-lab.service (systemd)            │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  Debian 12 Host (Target)             Port 8080       │
+│                                                      │
+│  /opt/scrn-lab/                                      │
+│  ├── app.py                 wsgiref WSGI server      │
+│  ├── users.db               SQLite database          │
+│  ├── download_fonts.sh      Font downloader script   │
+│  ├── setup.sh               Automated installer      │
+│  ├── templates/                                      │
+│  │   ├── login.html         ← SQLi attack surface    │
+│  │   ├── dashboard.html     Post-auth hub            │
+│  │   ├── diagnostics.html   ← RCE attack surface     │
+│  │   └── files.html         ← LFI attack surface     │
+│  └── static/                                         │
+│      ├── sc_rail_control.html                        │
+│      ├── hoover_dam_wireframe.html                   │
+│      └── fonts/                                      │
+│          ├── fonts.css      @font-face declarations  │
+│          └── *.ttf          Local font files          │
+│                                                      │
+│  Server: wsgiref.simple_server (Python stdlib)       │
+│  Service: scrn-lab.service (systemd)                 │
+└──────────────────────────────────────────────────────┘
 ```
 
 ### Route Map
@@ -323,6 +341,7 @@ The Flask web server hosting both applications behind an intentionally vulnerabl
 | `/diagnostics` | GET/POST | Yes | Network diagnostic tools — **Command injection target** |
 | `/files` | GET | Yes | File browser — **Directory traversal target** |
 | `/logout` | GET | No | Session termination |
+| `/fonts/*` | GET | No | Local font file serving |
 
 ### Default Credentials
 
@@ -536,8 +555,7 @@ All four user accounts use dictionary words or trivially guessable passwords. No
 
 - **User enumeration**: Failed login returns differentiated error messages — "User not found" vs "Invalid password" — enabling username enumeration
 - **SQL error echoing**: Malformed injection payloads return the full query string and Python traceback in the browser
-- **Server headers**: All responses include `X-Powered-By: Flask/2.3.0 Python/3.11` and `Server: SCRN-LabServer/2.4.1`
-- **Debug mode**: Flask runs with `debug=True` — Werkzeug interactive debugger potentially accessible at `/console`
+- **Server headers**: All responses include `X-Powered-By: Python/3.11 stdlib` and `Server: SCRN-LabServer/2.4.1`
 - **Command echo**: The diagnostics page displays the exact shell command string that was executed
 
 ---
@@ -546,10 +564,11 @@ All four user accounts use dictionary words or trivially guessable passwords. No
 
 - No CSRF tokens on any form
 - No rate limiting on login or diagnostics
-- Hardcoded `secret_key = 'SuperSecretKey123!'` in source code (enables session cookie forgery)
+- Hardcoded `SECRET_KEY` in source code (session forgery possible if discovered via LFI)
 - No `Content-Security-Policy`, `X-Frame-Options`, or `X-Content-Type-Options` headers
 - No `HttpOnly` or `Secure` flags on session cookies
 - Session fixation — no session ID regeneration upon authentication
+- In-memory session store — sessions lost on server restart (no persistence layer)
 
 ---
 
@@ -598,7 +617,7 @@ All four user accounts use dictionary words or trivially guessable passwords. No
 3. Chain: SQLi auth bypass → authenticated session → command injection → reverse shell
 4. Use Metasploit `exploit/multi/script/web_delivery` to establish a Meterpreter session
 5. Post-exploitation: enumerate the host, escalate privileges, establish persistence
-6. Forge a session cookie using the hardcoded `secret_key` found via directory traversal
+6. Forge a session cookie using the hardcoded secret key found via directory traversal
 7. Write a comprehensive penetration test report documenting all findings per NIST SP 800-115
 
 ---
@@ -607,9 +626,9 @@ All four user accounts use dictionary words or trivially guessable passwords. No
 
 ### Requirements
 
-- **Debian 12** (Bookworm) — tested on clean minimal install
+- **Debian 12** (Bookworm) — tested on clean minimal and desktop installs
 - **Python 3.11+** (included in Debian 12)
-- **Root access** for initial setup
+- **Root access** for initial setup and binding to port 8080
 - **Isolated network** — do not expose to untrusted network segments
 
 ### Quick Start
@@ -619,29 +638,29 @@ All four user accounts use dictionary words or trivially guessable passwords. No
 git clone https://github.com/<your-org>/scrn-lab.git
 cd scrn-lab
 
-# Run the automated setup
+# Run immediately — no setup needed
+sudo python3 app.py
+
+# Or run the full automated setup (systemd service, helpers)
 sudo chmod +x setup.sh
 sudo ./setup.sh
-
-# Verify the service is running
-curl http://localhost:8080/login
 ```
 
-The setup script handles all of the following automatically:
+The server starts immediately with `python3 app.py` — no package installation, no virtual environment, no compilation step. The `setup.sh` script is optional and provides systemd integration, helper scripts, and deployment to `/opt/scrn-lab/`.
 
-- System package installation (`python3`, `python3-venv`, `net-tools`, `traceroute`, `dnsutils`, `sqlite3`)
-- Python virtual environment creation and Flask installation
-- Application deployment to `/opt/scrn-lab/`
-- SQLite database initialization with default user accounts
-- systemd service creation and activation (`scrn-lab.service`)
-- Helper script generation (`start.sh`, `stop.sh`, `reset-db.sh`)
+### What `setup.sh` Does
 
-### Manual Start (without systemd)
+- Installs system utilities (`net-tools`, `traceroute`, `dnsutils`, `sqlite3`) — **not** pip or any Python packages
+- Copies application files to `/opt/scrn-lab/`
+- Initializes the SQLite database with default users
+- Creates and enables `scrn-lab.service` (systemd)
+- Generates helper scripts: `start.sh`, `stop.sh`, `reset-db.sh`
+
+### Manual Start (No Setup Required)
 
 ```bash
-cd /opt/scrn-lab
-source venv/bin/activate
-python3 app.py
+cd scrn-lab
+sudo python3 app.py
 ```
 
 ---
@@ -663,28 +682,62 @@ journalctl -u scrn-lab -f
 
 # Manual foreground run (useful for debugging)
 cd /opt/scrn-lab
-source venv/bin/activate
-python3 app.py
+sudo python3 app.py
 ```
 
 ---
 
 ## Offline Capability
 
-Both the Rail Control and Hoover Dam applications are single-file HTML with no mandatory external dependencies at runtime. The only external references are Google Fonts imports (typography) and a Three.js CDN load (Hoover Dam only).
+The entire project is designed for air-gapped lab networks with no internet access.
 
-For **fully air-gapped** deployments:
+### Server
 
-1. **Rail Control System** — Works 100% offline. Falls back to system fonts if Google Fonts CDN is unreachable.
-2. **Hoover Dam Schematic** — Requires `three.min.js` (r128). Pre-cache it for offline use:
+Runs on Python 3 standard library (`wsgiref.simple_server`). Zero packages to install, zero downloads, zero network calls. If `python3` exists on the box, the server runs.
 
-   ```bash
-   cd /opt/scrn-lab/static
-   curl -o three.min.js https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js
-   # Update the <script src="..."> in hoover_dam_wireframe.html to: src="./three.min.js"
-   ```
+### Rail Control System
 
-3. **Flask server** — Runs entirely on localhost with zero outbound connections required.
+100% offline. Single-file HTML with inline CSS/JS and SVG rendering. No external requests of any kind.
+
+### Hoover Dam Schematic
+
+Requires Three.js r128. The HTML file references the CDN URL `https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js`. For fully air-gapped use, pre-cache it:
+
+```bash
+# On any internet-connected machine:
+curl -sL https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js \
+  -o three.min.js
+
+# Copy to the lab host and update the reference:
+scp three.min.js labhost:/opt/scrn-lab/static/three.min.js
+
+# Edit hoover_dam_wireframe.html — change the script src to:
+# <script src="three.min.js"></script>
+```
+
+### Fonts
+
+All templates reference local font files via `static/fonts/fonts.css` with `@font-face` declarations pointing to local `.ttf` files. System fallbacks are specified so the UI renders correctly even without the font files.
+
+To download the custom fonts (one-time, from any internet-connected machine):
+
+```bash
+chmod +x download_fonts.sh
+./download_fonts.sh
+
+# Copy to lab host:
+scp -r static/fonts/*.ttf labhost:/opt/scrn-lab/static/fonts/
+```
+
+**Font families used:**
+
+| Font | Role | System Fallback |
+|---|---|---|
+| Orbitron | Headings, HUD labels | `monospace` |
+| Share Tech Mono | Terminal readouts, data | `'Courier New', monospace` |
+| Rajdhani | Body text, UI elements | `Verdana, sans-serif` |
+| Chakra Petch | Hoover Dam HUD | `sans-serif` |
+| Courier Prime | Code, data display | `'Courier New', monospace` |
 
 ---
 
@@ -692,30 +745,36 @@ For **fully air-gapped** deployments:
 
 ```
 scrn-lab/
-├── README.md                          ← This file
-├── setup.sh                           ← Debian 12 automated installer
-├── app.py                             ← Flask server with all vulnerability logic
+├── README.md                              ← This file
+├── app.py                                 ← WSGI server (wsgiref, all vuln logic)
+├── setup.sh                               ← Debian 12 automated installer
+├── download_fonts.sh                      ← Font downloader (run on internet machine)
 ├── templates/
-│   ├── login.html                     ← Authentication page (SQLi surface)
-│   ├── dashboard.html                 ← Post-auth application hub
-│   ├── diagnostics.html               ← Network diagnostic tools (RCE surface)
-│   └── files.html                     ← File browser (LFI surface)
+│   ├── login.html                         ← Auth page (SQLi surface)
+│   ├── dashboard.html                     ← Post-auth application hub
+│   ├── diagnostics.html                   ← Network tools (RCE surface)
+│   └── files.html                         ← File browser (LFI surface)
 ├── static/
-│   ├── sc_rail_control.html           ← SC Rail Network Control System
-│   └── hoover_dam_wireframe.html      ← Hoover Dam 3D Wireframe Schematic
-└── users.db                           ← SQLite database (created at runtime)
+│   ├── sc_rail_control.html               ← SC Rail Network Control System
+│   ├── hoover_dam_wireframe.html          ← Hoover Dam 3D Wireframe
+│   └── fonts/
+│       ├── fonts.css                      ← @font-face declarations
+│       └── *.ttf                          ← Font files (via download_fonts.sh)
+└── users.db                               ← SQLite database (created at runtime)
 ```
 
 | File | Lines | Description |
 |---|---|---|
-| `app.py` | ~200 | Flask server — SQLi, RCE, LFI vulnerabilities, auth logic, route handlers |
+| `app.py` | ~410 | WSGI server — SQLi, RCE, LFI vulnerabilities, auth, routing |
 | `sc_rail_control.html` | ~1,600 | Complete rail SCADA simulation with realistic physics |
 | `hoover_dam_wireframe.html` | ~1,170 | Three.js 3D wireframe model with HUD and labels |
-| `login.html` | ~220 | Industrial-themed authentication page |
-| `dashboard.html` | ~200 | Post-auth application hub with status cards |
-| `diagnostics.html` | ~150 | Network diagnostics form with terminal output |
-| `files.html` | ~120 | File browser with path input field |
-| `setup.sh` | ~180 | Automated Debian 12 deployment and service setup |
+| `login.html` | ~60 | Industrial-themed authentication page |
+| `dashboard.html` | ~65 | Post-auth hub with system cards and status indicators |
+| `diagnostics.html` | ~66 | Network diagnostics form with terminal output |
+| `files.html` | ~57 | File browser with path input |
+| `setup.sh` | ~264 | Automated Debian 12 deployment and systemd setup |
+| `download_fonts.sh` | ~40 | Google Fonts downloader for offline font bundling |
+| `fonts.css` | ~100 | Local @font-face declarations for all 5 font families |
 
 ---
 
@@ -723,13 +782,30 @@ scrn-lab/
 
 | Layer | Technology |
 |---|---|
-| Server | Python 3.11+ / Flask 2.3 |
-| Database | SQLite 3 (single-file, serverless) |
-| Process Manager | systemd |
-| Rail Control UI | Vanilla HTML / CSS / JavaScript, inline SVG rendering |
+| HTTP Server | `wsgiref.simple_server` (Python 3 stdlib WSGI) |
+| Database | SQLite 3 (Python `sqlite3` module) |
+| Template Engine | Custom regex-based (stdlib `re`) |
+| Process Management | systemd |
+| Session Store | In-memory Python dict |
+| Rail Control UI | Vanilla HTML / CSS / JavaScript, inline SVG |
 | 3D Engine | Three.js r128, WebGL |
 | Typography | Orbitron, Rajdhani, Share Tech Mono, Chakra Petch, Courier Prime |
 | Target OS | Debian 12 (Bookworm) |
+| External Dependencies | **None** |
+
+---
+
+## Technical Notes
+
+### Why wsgiref Instead of Flask
+
+The original server was built with Flask, but Debian 12 minimal installs on air-gapped networks cannot install pip packages — `python3-pip` pulls in `libpython3.11-dev` which triggers unresolvable dependency chains on space-constrained systems, and PyPI is unreachable without internet. Even the Debian-packaged `python3-flask` may not be available on minimal installs or local mirrors.
+
+`wsgiref.simple_server` is part of Python's standard library and requires zero installation. The WSGI architecture also properly handles HTTP response lifecycle — the earlier `http.server.BaseHTTPRequestHandler` implementation caused `NS_ERROR_NET_RESET` in Firefox on POST requests due to socket race conditions in the handler's connection management.
+
+### Why Local Fonts
+
+Google Fonts CDN imports (`@import url('https://fonts.googleapis.com/...')`) require internet access, which breaks on air-gapped networks. The `fonts.css` file provides identical `@font-face` declarations pointing to local `.ttf` files, with system font fallbacks so the UI remains functional even without the custom fonts installed.
 
 ---
 
